@@ -1,60 +1,18 @@
 <?php
 header("Content-Type: application/json");
+require_once "../config.php";
 
-// ================================
-//   🧪 فحص مسار config.php
-// ================================
-$paths = [
-    __DIR__ . "/../config.php",
-    __DIR__ . "/config.php",
-    __DIR__ . "/../../config.php",
-    __DIR__ . "/../..//config.php",
-];
+// قراءة JSON
+$input = json_decode(file_get_contents("php://input"), true);
+$token = $input["token"] ?? "";
 
-$loaded = false;
-
-foreach ($paths as $p) {
-    if (file_exists($p)) {
-        require_once $p;
-        $loaded = true;
-        break;
-    }
-}
-
-if (!$loaded) {
-    echo json_encode([
-        "status" => false,
-        "message" => "Config file not found",
-        "tried_paths" => $paths
-    ]);
-    exit;
-}
-
-// ================================
-//   🧪 فحص PDO بعد تحميل الكونفيق
-// ================================
-if (!isset($pdo)) {
-    echo json_encode([
-        "status" => false,
-        "message" => "PDO NOT LOADED – config.php did not create \$pdo"
-    ]);
-    exit;
-}
-
-// ================================
-//   🧪 قراءة التوكن
-// ================================
-$data = json_decode(file_get_contents("php://input"), true);
-$token = $data["token"] ?? "";
-
+// تحقق من وجود التوكن
 if (empty($token)) {
     echo json_encode(["status" => false, "message" => "Token required"]);
     exit;
 }
 
-// ================================
-//   🧪 التحقق من التوكن
-// ================================
+// جلب user_id من جدول user_tokens
 $stmt = $pdo->prepare("SELECT user_id FROM user_tokens WHERE token = ?");
 $stmt->execute([$token]);
 $tokenRow = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -66,10 +24,8 @@ if (!$tokenRow) {
 
 $user_id = $tokenRow["user_id"];
 
-// ================================
-//   ✔️ جلب مهام هذا المستخدم
-// ================================
-$sql = "
+// جلب المهام
+$stmt = $pdo->prepare("
     SELECT 
         id,
         created_by,
@@ -82,18 +38,13 @@ $sql = "
         updated_at
     FROM tasks
     WHERE created_by = ?
-    ORDER BY id DESC
-";
+    ORDER BY created_at DESC
+");
 
-$stmt = $pdo->prepare($sql);
 $stmt->execute([$user_id]);
 $tasks = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// ================================
-//   🚀 الإخراج النهائي
-// ================================
 echo json_encode([
     "status" => true,
     "data" => $tasks
 ]);
-
