@@ -1,81 +1,47 @@
 <?php
-header("Content-Type: application/json; charset=UTF-8");
-header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: POST");
+header("Content-Type: application/json");
+require_once "../config.php";
 
-$config = include __DIR__ . "/../config.php";
+// قراءة token من body
+$input = json_decode(file_get_contents("php://input"), true);
+$token = $input["token"] ?? "";
 
-try {
-    $dsn = "mysql:host={$config['host']};dbname={$config['db']};charset=utf8mb4";
-    $pdo = new PDO($dsn, $config['user'], $config['pass'], [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
-    ]);
-} catch (Exception $e) {
-    echo json_encode([
-        "status" => false,
-        "message" => "DB Connection failed",
-        "error" => $e->getMessage()
-    ]);
+// التحقق من وجود التوكن
+if (empty($token)) {
+    echo json_encode(["status" => false, "message" => "Token required"]);
     exit;
 }
 
-$data = json_decode(file_get_contents("php://input"), true);
+// التحقق من اتصال PDO
+if (!isset($pdo)) {
+    echo json_encode(["status" => false, "message" => "PDO NOT LOADED"]);
+    exit;
+}
 
-$token = $data['token'] ?? "";
-
-// التحقق من التوكن
+// جلب المستخدم من user_tokens
 $stmt = $pdo->prepare("SELECT user_id FROM user_tokens WHERE token = ?");
 $stmt->execute([$token]);
-$tokenData = $stmt->fetch(PDO::FETCH_ASSOC);
+$userRow = $stmt->fetch(PDO::FETCH_ASSOC);
 
-if (!$tokenData) {
-    echo json_encode([
-        "status" => false,
-        "message" => "Invalid token"
-    ]);
+if (!$userRow) {
+    echo json_encode(["status" => false, "message" => "Invalid token"]);
     exit;
 }
 
-$user_id = $tokenData['user_id'];
+$user_id = $userRow["user_id"];
 
-// معلومات المستخدم
-$stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
+// **جلب العملاء الذي أضافهم هذا المستخدم**
+$stmt = $pdo->prepare("
+    SELECT 
+        id, name, phone, store_name, address, lat, lng, created_at
+    FROM customers
+    WHERE created_by = ?
+    ORDER BY id DESC
+");
 $stmt->execute([$user_id]);
-$user = $stmt->fetch(PDO::FETCH_ASSOC);
-
-$role = $user['role_id'];
-$branch_id = $user['branch_id'];
-$team_id = $user['team_id'];
-
-// جلب العملاء حسب نوع المستخدم
-if ($role == 3) { 
-    // مندوب ميداني يشوف عملاء فريقه
-    $stmt = $pdo->prepare("
-        SELECT c.* FROM customers c
-        JOIN teams t ON t.id = ?
-        WHERE c.created_by = t.field_user_id
-    ");
-    $stmt->execute([$team_id]);
-
-} elseif ($role == 2) { 
-    // موظف مكتبي يشوف عملاء الفرع
-    $stmt = $pdo->prepare("
-        SELECT c.* FROM customers c
-        JOIN teams t ON c.created_by = t.field_user_id
-        WHERE t.branch_id = ?
-    ");
-    $stmt->execute([$branch_id]);
-
-} else {
-    echo json_encode([
-        "status" => false,
-        "message" => "User role not allowed"
-    ]);
-    exit;
-}
-
 $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+// إخراج النتيجة
 echo json_encode([
     "status" => true,
     "data" => $clients
