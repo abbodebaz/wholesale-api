@@ -1,51 +1,50 @@
 <?php
-require_once __DIR__ . '/../config.php';
-header('Content-Type: application/json');
+header("Content-Type: application/json");
+require_once "../config.php";   // أهم خطوة – الاتصال بقاعدة البيانات
 
-// Read token
-$input = json_decode(file_get_contents("php://input"), true);
-$token = $input['token'] ?? null;
+// قراءة الـ token
+$data = json_decode(file_get_contents("php://input"), true);
+$token = $data["token"] ?? "";
 
-if (!$token) {
-    echo json_encode(["status" => false, "message" => "Missing token"]);
+// تأكيد وجود التوكن
+if (empty($token)) {
+    echo json_encode(["status" => false, "message" => "Token required"]);
     exit;
 }
 
-// Validate token
+// التحقق من صلاحية المستخدم
 $stmt = $pdo->prepare("SELECT user_id FROM user_tokens WHERE token = ?");
 $stmt->execute([$token]);
-$tokenData = $stmt->fetch(PDO::FETCH_ASSOC);
+$tokenRow = $stmt->fetch(PDO::FETCH_ASSOC);
 
-if (!$tokenData) {
+if (!$tokenRow) {
     echo json_encode(["status" => false, "message" => "Invalid token"]);
     exit;
 }
 
-$user_id = $tokenData['user_id'];
+$user_id = $tokenRow["user_id"];
 
-// Fetch tasks created by this user
+// الآن نجيب المهام الخاصة بهذا المستخدم
 $stmt = $pdo->prepare("
     SELECT 
-        t.id,
-        t.customer_id,
-        t.task_type,
-        t.status,
-        t.notes,
-        t.attachment,
-        t.created_at,
-        t.updated_at,
-        c.name AS customer_name,
-        c.phone AS customer_phone
-    FROM tasks t
-    LEFT JOIN customers c ON c.id = t.customer_id
-    WHERE t.created_by = ?
-    ORDER BY t.id DESC
+        id,
+        customer_id,
+        task_type,
+        status,
+        notes,
+        attachment,
+        created_at,
+        updated_at
+    FROM tasks 
+    WHERE created_by = ?
+    ORDER BY id DESC
 ");
-
 $stmt->execute([$user_id]);
+
 $tasks = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 echo json_encode([
     "status" => true,
     "data" => $tasks
 ]);
+?>
