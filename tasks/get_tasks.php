@@ -1,70 +1,65 @@
 <?php
-header("Content-Type: application/json; charset=UTF-8");
-header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: POST");
+require_once "../config.php";
 
-$config = include __DIR__ . "/../config.php";
+header("Content-Type: application/json");
 
-// اتصال بقاعدة البيانات
+// Only POST
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    echo json_encode(["status" => false, "message" => "Method not allowed"]);
+    exit;
+}
+
+// Get raw input
+$input = json_decode(file_get_contents("php://input"), true);
+$token = $input['token'] ?? '';
+
+if (!$token) {
+    echo json_encode(["status" => false, "message" => "Token is required"]);
+    exit;
+}
+
+// Validate token
 try {
-    $dsn = "mysql:host={$config['host']};dbname={$config['db']};charset=utf8mb4";
-    $pdo = new PDO($dsn, $config['user'], $config['pass'], [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
+    $stmt = $pdo->prepare("SELECT user_id FROM user_tokens WHERE token = ?");
+    $stmt->execute([$token]);
+    $tokenData = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$tokenData) {
+        echo json_encode(["status" => false, "message" => "Invalid token"]);
+        exit;
+    }
+
+    $user_id = $tokenData['user_id'];
+
+    // Get tasks created by this user
+    $query = "
+        SELECT 
+            id,
+            customer_id,
+            task_type,
+            status,
+            notes,
+            attachment,
+            created_at,
+            updated_at
+        FROM tasks
+        WHERE created_by = ?
+        ORDER BY id DESC
+    ";
+
+    $stmt = $pdo->prepare($query);
+    $stmt->execute([$user_id]);
+    $tasks = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    echo json_encode([
+        "status" => true,
+        "data" => $tasks
     ]);
+
 } catch (Exception $e) {
     echo json_encode([
         "status" => false,
-        "message" => "DB Connection failed",
+        "message" => "Server error",
         "error" => $e->getMessage()
     ]);
-    exit;
 }
-
-// قراءة البيانات
-$data = json_decode(file_get_contents("php://input"), true);
-
-$token = $data['token'] ?? "";
-
-// التحقق من التوكن
-$stmt = $pdo->prepare("SELECT user_id FROM user_tokens WHERE token = ?");
-$stmt->execute([$token]);
-$tokenData = $stmt->fetch(PDO::FETCH_ASSOC);
-
-if (!$tokenData) {
-    echo json_encode([
-        "status" => false,
-        "message" => "Invalid token"
-    ]);
-    exit;
-}
-
-$user_id = $tokenData['user_id'];
-
-// جلب المهام الخاصة بالمستخدم
-$stmt = $pdo->prepare("
-    SELECT 
-        t.id,
-        t.task_type,
-        t.notes,
-        t.status,
-        t.customer_id,
-        t.created_at,
-        c.name AS customer_name,
-        c.phone AS customer_phone,
-        c.store_name
-    FROM tasks t
-    LEFT JOIN customers c ON c.id = t.customer_id
-    WHERE t.user_id = ?
-    ORDER BY t.created_at DESC
-");
-
-
-
-$stmt->execute([$user_id]);
-
-$tasks = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-echo json_encode([
-    "status" => true,
-    "data" => $tasks
-]);
