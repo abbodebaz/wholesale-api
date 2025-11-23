@@ -1,65 +1,51 @@
 <?php
-require_once "../config.php";
+require_once __DIR__ . '/../config.php';
+header('Content-Type: application/json');
 
-header("Content-Type: application/json");
-
-// Only POST
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    echo json_encode(["status" => false, "message" => "Method not allowed"]);
-    exit;
-}
-
-// Get raw input
+// Read token
 $input = json_decode(file_get_contents("php://input"), true);
-$token = $input['token'] ?? '';
+$token = $input['token'] ?? null;
 
 if (!$token) {
-    echo json_encode(["status" => false, "message" => "Token is required"]);
+    echo json_encode(["status" => false, "message" => "Missing token"]);
     exit;
 }
 
 // Validate token
-try {
-    $stmt = $pdo->prepare("SELECT user_id FROM user_tokens WHERE token = ?");
-    $stmt->execute([$token]);
-    $tokenData = $stmt->fetch(PDO::FETCH_ASSOC);
+$stmt = $pdo->prepare("SELECT user_id FROM user_tokens WHERE token = ?");
+$stmt->execute([$token]);
+$tokenData = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if (!$tokenData) {
-        echo json_encode(["status" => false, "message" => "Invalid token"]);
-        exit;
-    }
-
-    $user_id = $tokenData['user_id'];
-
-    // Get tasks created by this user
-    $query = "
-        SELECT 
-            id,
-            customer_id,
-            task_type,
-            status,
-            notes,
-            attachment,
-            created_at,
-            updated_at
-        FROM tasks
-        WHERE created_by = ?
-        ORDER BY id DESC
-    ";
-
-    $stmt = $pdo->prepare($query);
-    $stmt->execute([$user_id]);
-    $tasks = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-    echo json_encode([
-        "status" => true,
-        "data" => $tasks
-    ]);
-
-} catch (Exception $e) {
-    echo json_encode([
-        "status" => false,
-        "message" => "Server error",
-        "error" => $e->getMessage()
-    ]);
+if (!$tokenData) {
+    echo json_encode(["status" => false, "message" => "Invalid token"]);
+    exit;
 }
+
+$user_id = $tokenData['user_id'];
+
+// Fetch tasks created by this user
+$stmt = $pdo->prepare("
+    SELECT 
+        t.id,
+        t.customer_id,
+        t.task_type,
+        t.status,
+        t.notes,
+        t.attachment,
+        t.created_at,
+        t.updated_at,
+        c.name AS customer_name,
+        c.phone AS customer_phone
+    FROM tasks t
+    LEFT JOIN customers c ON c.id = t.customer_id
+    WHERE t.created_by = ?
+    ORDER BY t.id DESC
+");
+
+$stmt->execute([$user_id]);
+$tasks = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+echo json_encode([
+    "status" => true,
+    "data" => $tasks
+]);
