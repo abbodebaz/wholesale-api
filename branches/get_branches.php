@@ -2,29 +2,39 @@
 header("Content-Type: application/json");
 require_once "../config.php";
 
-// قراءة JSON
-$data = json_decode(file_get_contents("php://input"), true);
-$token = $data["token"] ?? "";
+// قراءة token
+$input = json_decode(file_get_contents("php://input"), true);
+$token = $input["token"] ?? "";
 
-// التحقق من التوكن
+// التحقق من وجود التوكن
 if (empty($token)) {
     echo json_encode(["status" => false, "message" => "Token required"]);
     exit;
 }
 
-// التحقق من صحة التوكن
+// التحقق من PDO
+if (!isset($pdo)) {
+    echo json_encode(["status" => false, "message" => "PDO NOT LOADED"]);
+    exit;
+}
+
+// التحقق من أن التوكن يخص مستخدم
 $stmt = $pdo->prepare("SELECT user_id FROM user_tokens WHERE token = ?");
 $stmt->execute([$token]);
-$tok = $stmt->fetch(PDO::FETCH_ASSOC);
+$userRow = $stmt->fetch(PDO::FETCH_ASSOC);
 
-if (!$tok) {
+if (!$userRow) {
     echo json_encode(["status" => false, "message" => "Invalid token"]);
     exit;
 }
 
-// جلب الفروع
-$stmt = $pdo->prepare("SELECT id, name, city, created_at FROM branches ORDER BY id DESC");
+// جلب الفروع (الأعمدة الموجودة فعلياً)
+$stmt = $pdo->prepare("SELECT id, name, city, sap_code FROM branches");
 $stmt->execute();
-$rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$branches = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-echo json_encode(["status" => true, "data" => $rows]);
+// إرجاع البيانات
+echo json_encode([
+    "status" => true,
+    "data" => $branches
+]);
