@@ -54,9 +54,10 @@ $stmt = $pdo->prepare("
         c.store_name
     FROM tasks t
     LEFT JOIN customers c ON c.id = t.customer_id
-    WHERE t.assigned_to = ?
+    WHERE t.user_id = ?
     ORDER BY t.created_at DESC
 ");
+
 
 
 $stmt->execute([$user_id]);
