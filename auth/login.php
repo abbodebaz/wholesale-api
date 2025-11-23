@@ -23,14 +23,14 @@ require_once "../config.php";
 
 // قراءة بيانات JSON القادمة من التطبيق
 $input = json_decode(file_get_contents("php://input"), true);
-$phone = $input["phone"] ?? "";
-$password = $input["password"] ?? "";
+$email = $input['email'] ?? '';
+$password = $input['password'] ?? '';
 
-// التحقق من المدخلات
-if (empty($phone) || empty($password)) {
-    echo json_encode(["status" => false, "message" => "Phone and password are required"]);
-    exit;
+if (empty($email) || empty($password)) {
+    echo json_encode(["status" => "error", "message" => "Email and password are required"]);
+    exit();
 }
+
 
 // التحقق من وجود اتصال PDO
 if (!isset($pdo)) {
