@@ -3,21 +3,18 @@ header("Content-Type: application/json; charset=UTF-8");
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: POST");
 
-// استدعاء الكونفيق
 $config = include __DIR__ . "/../config.php";
 
-// الاتصال بقاعدة البيانات
-$conn = new mysqli(
-    $config['host'],
-    $config['user'],
-    $config['pass'],
-    $config['db']
-);
-
-if ($conn->connect_error) {
+try {
+    $dsn = "mysql:host={$config['host']};dbname={$config['db']};charset=utf8mb4";
+    $pdo = new PDO($dsn, $config['user'], $config['pass'], [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
+    ]);
+} catch (Exception $e) {
     echo json_encode([
         "status" => false,
-        "message" => "Database connection failed: " . $conn->connect_error
+        "message" => "DB Connection failed",
+        "error" => $e->getMessage()
     ]);
     exit;
 }
@@ -27,7 +24,6 @@ $data = json_decode(file_get_contents("php://input"), true);
 $phone = $data['phone'] ?? "";
 $password = $data['password'] ?? "";
 
-// التحقق من المدخلات
 if (empty($phone) || empty($password)) {
     echo json_encode([
         "status" => false,
@@ -36,13 +32,11 @@ if (empty($phone) || empty($password)) {
     exit;
 }
 
-// البحث في جدول users
-$stmt = $conn->prepare("SELECT id, name, phone, password, role_id, branch_id, team_id FROM users WHERE phone = ?");
-$stmt->bind_param("s", $phone);
-$stmt->execute();
-$result = $stmt->get_result();
+$stmt = $pdo->prepare("SELECT * FROM users WHERE phone = ?");
+$stmt->execute([$phone]);
+$user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-if ($result->num_rows == 0) {
+if (!$user) {
     echo json_encode([
         "status" => false,
         "message" => "User not found"
@@ -50,9 +44,6 @@ if ($result->num_rows == 0) {
     exit;
 }
 
-$user = $result->fetch_assoc();
-
-// التحقق من صحة كلمة المرور
 if (!password_verify($password, $user['password'])) {
     echo json_encode([
         "status" => false,
@@ -61,26 +52,21 @@ if (!password_verify($password, $user['password'])) {
     exit;
 }
 
-// إنشاء token
 $token = bin2hex(random_bytes(16));
 
-// إنشاء جدول tokens إذا ما كان موجود (مرة واحدة فقط)
-$conn->query("
-    CREATE TABLE IF NOT EXISTS user_tokens (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        user_id INT,
-        token VARCHAR(255),
-        created_at DATETIME,
-        INDEX(user_id)
-    )
+$pdo->exec("
+CREATE TABLE IF NOT EXISTS user_tokens (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT,
+    token VARCHAR(255),
+    created_at DATETIME,
+    INDEX(user_id)
+)
 ");
 
-// حفظ التوكن
-$stmt2 = $conn->prepare("INSERT INTO user_tokens (user_id, token, created_at) VALUES (?, ?, NOW())");
-$stmt2->bind_param("is", $user['id'], $token);
-$stmt2->execute();
+$stmt2 = $pdo->prepare("INSERT INTO user_tokens (user_id, token, created_at) VALUES (?, ?, NOW())");
+$stmt2->execute([$user['id'], $token]);
 
-// الاستجابة
 echo json_encode([
     "status" => true,
     "message" => "Login successful",
@@ -94,4 +80,3 @@ echo json_encode([
         "token" => $token
     ]
 ]);
-?>
