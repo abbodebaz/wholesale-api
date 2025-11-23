@@ -39,8 +39,8 @@ if (!isset($pdo)) {
 }
 
 // البحث عن المستخدم
-$stmt = $pdo->prepare("SELECT * FROM users WHERE phone = ?");
-$stmt->execute([$phone]);
+$stmt = $pdo->prepare("SELECT * FROM users WHERE email = ?");
+$stmt->execute([$email]);
 $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$user) {
