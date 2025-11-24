@@ -1,6 +1,8 @@
 <?php
 
-// السماح للدومين الرئيسي فقط
+// =========================
+//   CORS
+// =========================
 $allowedOrigins = [
     "https://ebaaptl.com",
     "https://www.ebaaptl.com"
@@ -11,25 +13,31 @@ if (isset($_SERVER['HTTP_ORIGIN']) && in_array($_SERVER['HTTP_ORIGIN'], $allowed
 }
 
 header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
+header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit();
 }
 
-<?php
 header("Content-Type: application/json");
 require_once "../config.php";
 
+
+// =========================
+//   إستقبال البيانات
+// =========================
 $token       = $_POST["token"] ?? "";
 $customer_id = $_POST["customer_id"] ?? "";
 $notes       = $_POST["notes"] ?? "";
 $lat         = $_POST["lat"] ?? "";
 $lng         = $_POST["lng"] ?? "";
-$images_json = $_POST["images"] ?? "[]"; // هنا نجيب أسماء الصور الجاهزة
+$images_b64  = $_POST["images"] ?? "[]";    // هنا الصور Base64 جاهزة
 
-// تحقق من التوكن
+
+// =========================
+//   تحقق التوكن
+// =========================
 $stmt = $pdo->prepare("SELECT user_id FROM user_tokens WHERE token = ?");
 $stmt->execute([$token]);
 $user = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -41,76 +49,41 @@ if (!$user) {
 
 $field_user_id = $user["user_id"];
 
-// حفظ الزيارة
-$stmt = $pdo->prepare("
-    INSERT INTO visits (field_user_id, customer_id, notes, images, visited_at, lat, lng)
-    VALUES (?, ?, ?, ?, NOW(), ?, ?)
-");
 
-$ok = $stmt->execute([
-    $field_user_id,
-    $customer_id,
-    $notes,
-    $images_json,
-    $lat,
-    $lng
-]);
+// =========================
+//   حفظ الصور Base64 في السيرفر
+// =========================
+$imgArray = json_decode($images_b64, true);
+$savedImages = [];
 
-echo json_encode([
-    "status" => $ok,
-    "message" => $ok ? "Visit added successfully" : "Failed to add visit"
-]);
-
-
-// التحقق من التوكن
-$stmt = $pdo->prepare("SELECT user_id FROM user_tokens WHERE token = ?");
-$stmt->execute([$token]);
-$user = $stmt->fetch(PDO::FETCH_ASSOC);
-
-if (!$user) {
-    echo json_encode(["status" => false, "message" => "Invalid token"]);
-    exit;
-}
-
-$field_user_id = $user["user_id"];
-
-// المسار الصحيح في هوستنجر
 $uploadDir = "/home/u630342272/domains/ebaaptl.com/public_html/wholesale/uploads/visits/";
-$uploadURL = "https://ebaaptl.com/wholesale/uploads/visits/";
 
-// إنشاء مجلد الرفع إذا غير موجود
 if (!is_dir($uploadDir)) {
     mkdir($uploadDir, 0777, true);
 }
 
-// معالجة الصور
-$imageNames = [];
+foreach ($imgArray as $img) {
 
-if (!empty($_FILES["images"]["name"][0])) {
+    // decode Base64
+    $part = explode(",", $img);
+    $decoded = base64_decode(end($part));
 
-    for ($i = 0; $i < count($_FILES["images"]["name"]); $i++) {
+    // اسم الصورة
+    $fileName = "visit_" . uniqid() . ".jpg";
+    $fullPath = $uploadDir . $fileName;
 
-        $tmpName  = $_FILES["images"]["tmp_name"][$i];
-        $origName = $_FILES["images"]["name"][$i];
+    // حفظ الصورة
+    file_put_contents($fullPath, $decoded);
 
-        // استخراج نوع الامتداد
-        $ext = pathinfo($origName, PATHINFO_EXTENSION);
-        $fileName = "visit_" . uniqid() . "." . strtolower($ext);
-
-        // المسار الكامل
-        $fullPath = $uploadDir . $fileName;
-
-        // الرفع
-        if (move_uploaded_file($tmpName, $fullPath)) {
-            $imageNames[] = $fileName;
-        }
-    }
+    $savedImages[] = $fileName;
 }
 
-// تحويل الصور إلى JSON
-$imagesJSON = json_encode($imageNames);
+$imagesJSON = json_encode($savedImages);
 
-// حفظ الزيارة في قاعدة البيانات
+
+// =========================
+//   إدخال الزيارة
+// =========================
 $stmt = $pdo->prepare("
     INSERT INTO visits (field_user_id, customer_id, notes, images, visited_at, lat, lng)
     VALUES (?, ?, ?, ?, NOW(), ?, ?)
@@ -128,6 +101,5 @@ $ok = $stmt->execute([
 echo json_encode([
     "status"  => $ok,
     "message" => $ok ? "Visit added successfully" : "Failed to add visit",
-    "images"  => $imageNames
+    "images"  => $savedImages
 ]);
-
