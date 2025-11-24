@@ -25,17 +25,17 @@ $input = json_decode(file_get_contents("php://input"), true);
 $token       = $input["token"]       ?? "";
 $customer_id = $input["customer_id"] ?? "";
 $notes       = $input["notes"]       ?? "";
-$images      = $input["images"]      ?? []; // Array Base64
+$images      = $input["images"]      ?? []; 
 $lat         = $input["lat"]         ?? "";
 $lng         = $input["lng"]         ?? "";
 
-// التحقق من المدخلات
+// check
 if (empty($token) || empty($customer_id) || empty($lat) || empty($lng)) {
     echo json_encode(["status" => false, "message" => "Missing required fields"]);
     exit;
 }
 
-// التحقق من التوكن
+// token check
 $stmt = $pdo->prepare("SELECT user_id FROM user_tokens WHERE token = ?");
 $stmt->execute([$token]);
 $user = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -47,26 +47,34 @@ if (!$user) {
 
 $field_user_id = $user["user_id"];
 
-// معالجة الصور Base64 وتحويلها إلى ملفات
-$imagePaths = [];
+// IMPORTANT: visits path in hostinger website
+$uploadURL  = "https://ebaaptl.com/wholesale/uploads/visits/";
+$uploadDIR  = "/home/u630342272/public_html/wholesale/uploads/visits/";
+
+if (!is_dir($uploadDIR)) {
+    mkdir($uploadDIR, 0777, true);
+}
+
+$imageNames = [];
 
 if (!empty($images)) {
     foreach ($images as $imgBase64) {
+
         $data = explode(",", $imgBase64);
         $decoded = base64_decode(end($data));
 
-        $fileName = uniqid() . ".jpg";
-        $savePath = "../uploads/visits/" . $fileName;
+        $fileName = uniqid("visit_") . ".jpg";
+        $fullPath = $uploadDIR . $fileName;
 
-        file_put_contents($savePath, $decoded);
+        file_put_contents($fullPath, $decoded);
 
-        $imagePaths[] = "uploads/visits/" . $fileName;
+        $imageNames[] = $fileName; 
     }
 }
 
-$imagesJSON = json_encode($imagePaths);
+$imagesJSON = json_encode($imageNames);
 
-// حفظ الزيارة
+// save
 $stmt = $pdo->prepare("
     INSERT INTO visits (field_user_id, customer_id, notes, images, visited_at, lat, lng)
     VALUES (?, ?, ?, ?, NOW(), ?, ?)
