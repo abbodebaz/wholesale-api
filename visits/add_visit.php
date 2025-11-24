@@ -1,5 +1,6 @@
 <?php
 
+// السماح للدومين الرئيسي فقط
 $allowedOrigins = [
     "https://ebaaptl.com",
     "https://www.ebaaptl.com"
@@ -20,14 +21,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 header("Content-Type: application/json");
 require_once "../config.php";
 
-// المتغيرات من POST
+// استقبال المدخلات
 $token       = $_POST["token"]       ?? "";
 $customer_id = $_POST["customer_id"] ?? "";
 $notes       = $_POST["notes"]       ?? "";
 $lat         = $_POST["lat"]         ?? "";
 $lng         = $_POST["lng"]         ?? "";
 
-// التحقق من المدخلات الأساسية
+// التحقق من المدخلات
 if (empty($token) || empty($customer_id) || empty($lat) || empty($lng)) {
     echo json_encode(["status" => false, "message" => "Missing required fields"]);
     exit;
@@ -45,40 +46,43 @@ if (!$user) {
 
 $field_user_id = $user["user_id"];
 
-// مسار الرفع الصحيح
+// المسار الصحيح في هوستنجر
 $uploadDir = "/home/u630342272/domains/ebaaptl.com/public_html/wholesale/uploads/visits/";
 $uploadURL = "https://ebaaptl.com/wholesale/uploads/visits/";
 
-// إنشاء المجلد إذا غير موجود
+// إنشاء مجلد الرفع إذا غير موجود
 if (!is_dir($uploadDir)) {
     mkdir($uploadDir, 0777, true);
 }
 
-// معالجة الصور المرفوعة
+// معالجة الصور
 $imageNames = [];
 
 if (!empty($_FILES["images"]["name"][0])) {
 
     for ($i = 0; $i < count($_FILES["images"]["name"]); $i++) {
 
-        $tmpName = $_FILES["images"]["tmp_name"][$i];
+        $tmpName  = $_FILES["images"]["tmp_name"][$i];
         $origName = $_FILES["images"]["name"][$i];
 
+        // استخراج نوع الامتداد
         $ext = pathinfo($origName, PATHINFO_EXTENSION);
-        $fileName = "visit_" . uniqid() . "." . $ext;
+        $fileName = "visit_" . uniqid() . "." . strtolower($ext);
 
+        // المسار الكامل
         $fullPath = $uploadDir . $fileName;
 
+        // الرفع
         if (move_uploaded_file($tmpName, $fullPath)) {
             $imageNames[] = $fileName;
         }
     }
 }
 
-// تحويل الصور JSON
+// تحويل الصور إلى JSON
 $imagesJSON = json_encode($imageNames);
 
-// حفظ الزيارة
+// حفظ الزيارة في قاعدة البيانات
 $stmt = $pdo->prepare("
     INSERT INTO visits (field_user_id, customer_id, notes, images, visited_at, lat, lng)
     VALUES (?, ?, ?, ?, NOW(), ?, ?)
@@ -94,6 +98,8 @@ $ok = $stmt->execute([
 ]);
 
 echo json_encode([
-    "status" => $ok,
-    "message" => $ok ? "Visit added successfully" : "Failed to add visit"
+    "status"  => $ok,
+    "message" => $ok ? "Visit added successfully" : "Failed to add visit",
+    "images"  => $imageNames
 ]);
+
