@@ -58,36 +58,21 @@ if (!is_dir($uploadDIR)) {
 $imageNames = [];
 
 if (!empty($images)) {
-    foreach ($images as $imgBase64) {
 
-        $data = explode(",", $imgBase64);
-        $decoded = base64_decode(end($data));
+    $hostingerApi = "https://ebaaptl.com/wholesale/save_visit_images.php";
 
-        $fileName = uniqid("visit_") . ".jpg";
-        $fullPath = $uploadDIR . $fileName;
+    $response = file_get_contents($hostingerApi, false, stream_context_create([
+        "http" => [
+            "method" => "POST",
+            "header" => "Content-Type: application/json",
+            "content" => json_encode(["images" => $images])
+        ]
+    ]));
 
-        error_reporting(E_ALL);
-        ini_set('display_errors', 1);
-
-$write = file_put_contents($fullPath, $decoded);
-
-if ($write === false) {
-    echo json_encode([
-        "status" => false,
-        "message" => "Failed to write file",
-        "path" => $fullPath,
-        "dir_exists" => is_dir(dirname($fullPath)),
-        "dir_writable" => is_writable(dirname($fullPath)),
-        "file_writable" => is_writable($uploadDIR)
-    ]);
-    exit;
+    $data = json_decode($response, true);
+    $imageNames = $data["paths"] ?? [];
 }
 
-        $imageNames[] = $fileName;
-    }
-}
-
-$imagesJSON = json_encode($imageNames);
 
 // save visit
 $stmt = $pdo->prepare("
