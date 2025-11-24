@@ -19,18 +19,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 header("Content-Type: application/json");
 require_once "../config.php";
-require_once "../cloudinary_config.php"; // ملف إعدادات Cloudinary
 
-use Cloudinary\Cloudinary;
-
-// قراءة البيانات
 $token       = $_POST["token"] ?? "";
 $customer_id = $_POST["customer_id"] ?? "";
 $notes       = $_POST["notes"] ?? "";
 $lat         = $_POST["lat"] ?? "";
 $lng         = $_POST["lng"] ?? "";
+$images_json = $_POST["images"] ?? "[]"; // روابط Cloudinary فقط
 
-// تحقق من التوكن
+// تحقق من صلاحية التوكن
 $stmt = $pdo->prepare("SELECT user_id FROM user_tokens WHERE token = ?");
 $stmt->execute([$token]);
 $user = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -42,36 +39,7 @@ if (!$user) {
 
 $field_user_id = $user["user_id"];
 
-// رفع الصور إلى Cloudinary
-$imageUrls = [];
-
-if (!empty($_FILES["images"]["name"][0])) {
-
-    for ($i = 0; $i < count($_FILES["images"]["name"]); $i++) {
-
-        $tmpName = $_FILES["images"]["tmp_name"][$i];
-
-        $cloudinary = new Cloudinary([
-            "cloud" => [
-                "cloud_name" => "dzkcfjm8s",
-                "api_key"    => "416946167141595",
-                "api_secret" => "YOUR_SECRET_HERE"
-            ]
-        ]);
-
-        $upload = $cloudinary->uploadApi()->upload($tmpName, [
-            "folder" => "visits"
-        ]);
-
-        if (!empty($upload["secure_url"])) {
-            $imageUrls[] = $upload["secure_url"];
-        }
-    }
-}
-
-$imagesJSON = json_encode($imageUrls);
-
-// حفظ البيانات
+// إضافة زيارة
 $stmt = $pdo->prepare("
     INSERT INTO visits (field_user_id, customer_id, notes, images, visited_at, lat, lng)
     VALUES (?, ?, ?, ?, NOW(), ?, ?)
@@ -81,13 +49,13 @@ $ok = $stmt->execute([
     $field_user_id,
     $customer_id,
     $notes,
-    $imagesJSON,
+    $images_json,
     $lat,
     $lng
 ]);
 
 echo json_encode([
-    "status"  => $ok,
-    "message" => $ok ? "Visit added successfully" : "Failed to add visit",
-    "images"  => $imageUrls
+    "status" => $ok,
+    "message" => $ok ? "Visit added successfully" : "Failed to insert visit",
+    "images" => json_decode($images_json, true)
 ]);
