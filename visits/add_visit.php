@@ -46,7 +46,7 @@ if (!$user) {
 $field_user_id = $user["user_id"];
 
 // مسار الرفع الصحيح
-$uploadDir = "/home/u630342272/public_html/wholesale/uploads/visits/";
+$uploadDir = "/home/u630342272/domains/ebaaptl.com/public_html/wholesale/uploads/visits/";
 $uploadURL = "https://ebaaptl.com/wholesale/uploads/visits/";
 
 // إنشاء المجلد إذا غير موجود
