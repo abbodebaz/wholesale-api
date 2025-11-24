@@ -20,22 +20,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 header("Content-Type: application/json");
 require_once "../config.php";
 
-// قراءة JSON BODY
 $input = json_decode(file_get_contents("php://input"), true);
 
 $token       = $input["token"]       ?? "";
 $customer_id = $input["customer_id"] ?? "";
 $notes       = $input["notes"]       ?? "";
-$images      = $input["images"]      ?? [];   // array of Base64 strings
+$images      = $input["images"]      ?? []; // Array Base64
 $lat         = $input["lat"]         ?? "";
 $lng         = $input["lng"]         ?? "";
 
-// تحقق من التوكن
-if (empty($token)) {
-    echo json_encode(["status" => false, "message" => "Token required"]);
+// التحقق من المدخلات
+if (empty($token) || empty($customer_id) || empty($lat) || empty($lng)) {
+    echo json_encode(["status" => false, "message" => "Missing required fields"]);
     exit;
 }
 
+// التحقق من التوكن
 $stmt = $pdo->prepare("SELECT user_id FROM user_tokens WHERE token = ?");
 $stmt->execute([$token]);
 $user = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -47,38 +47,41 @@ if (!$user) {
 
 $field_user_id = $user["user_id"];
 
-// رفع الصور
-$uploaded_files = [];
+// معالجة الصور Base64 وتحويلها إلى ملفات
+$imagePaths = [];
 
-if (!empty($images) && is_array($images)) {
+if (!empty($images)) {
+    foreach ($images as $imgBase64) {
+        $data = explode(",", $imgBase64);
+        $decoded = base64_decode(end($data));
 
-    $uploadPath = "../uploads/visits/";
+        $fileName = uniqid() . ".jpg";
+        $savePath = "../uploads/visits/" . $fileName;
 
-    if (!is_dir($uploadPath)) {
-        mkdir($uploadPath, 0777, true);
-    }
+        file_put_contents($savePath, $decoded);
 
-    foreach ($images as $img64) {
-        $imageName = uniqid("visit_") . ".jpg";
-        $imagePath = $uploadPath . $imageName;
-
-        file_put_contents($imagePath, base64_decode($img64));
-
-        $uploaded_files[] = $imageName;
+        $imagePaths[] = "uploads/visits/" . $fileName;
     }
 }
 
-$images_json = json_encode($uploaded_files);
+$imagesJSON = json_encode($imagePaths);
 
-// إدخال الزيارة
+// حفظ الزيارة
 $stmt = $pdo->prepare("
     INSERT INTO visits (field_user_id, customer_id, notes, images, visited_at, lat, lng)
     VALUES (?, ?, ?, ?, NOW(), ?, ?)
 ");
 
-$ok = $stmt->execute([$field_user_id, $customer_id, $notes, $images_json, $lat, $lng]);
+$ok = $stmt->execute([
+    $field_user_id,
+    $customer_id,
+    $notes,
+    $imagesJSON,
+    $lat,
+    $lng
+]);
 
 echo json_encode([
     "status" => $ok,
-    "message" => $ok ? "Visit added" : "Failed to add visit"
+    "message" => $ok ? "Visit added successfully" : "Failed to add visit"
 ]);
