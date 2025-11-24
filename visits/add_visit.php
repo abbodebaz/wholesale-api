@@ -25,7 +25,7 @@ $input = json_decode(file_get_contents("php://input"), true);
 $token       = $input["token"]       ?? "";
 $customer_id = $input["customer_id"] ?? "";
 $notes       = $input["notes"]       ?? "";
-$images      = $input["images"]      ?? []; 
+$images      = $input["images"]      ?? [];
 $lat         = $input["lat"]         ?? "";
 $lng         = $input["lng"]         ?? "";
 
@@ -47,9 +47,9 @@ if (!$user) {
 
 $field_user_id = $user["user_id"];
 
-// IMPORTANT: visits path in hostinger website
+// === FIXED: Correct Hostinger upload path ===
 $uploadURL  = "https://ebaaptl.com/wholesale/uploads/visits/";
-$uploadDIR  = "/home/u630342272/public_html/wholesale/uploads/visits/";
+$uploadDIR  = "/home/u630342272/domains/ebaaptl.com/public_html/wholesale/uploads/visits/";
 
 if (!is_dir($uploadDIR)) {
     mkdir($uploadDIR, 0777, true);
@@ -68,13 +68,13 @@ if (!empty($images)) {
 
         file_put_contents($fullPath, $decoded);
 
-        $imageNames[] = $fileName; 
+        $imageNames[] = $fileName;
     }
 }
 
 $imagesJSON = json_encode($imageNames);
 
-// save
+// save visit
 $stmt = $pdo->prepare("
     INSERT INTO visits (field_user_id, customer_id, notes, images, visited_at, lat, lng)
     VALUES (?, ?, ?, ?, NOW(), ?, ?)
