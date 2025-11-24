@@ -17,27 +17,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit();
 }
 
-
 header("Content-Type: application/json");
 require_once "../config.php";
 
-// قراءة token من body
+// ========== قراءة التوكن من كل مكان ==========
 $input = json_decode(file_get_contents("php://input"), true);
+
+// 1) JSON body
 $token = $input["token"] ?? "";
 
-// التحقق من وجود التوكن
+// 2) GET parameter
+if (empty($token) && isset($_GET['token'])) {
+    $token = $_GET['token'];
+}
+
+// 3) Authorization header: Bearer TOKEN
+if (empty($token) && isset($_SERVER['HTTP_AUTHORIZATION'])) {
+    if (preg_match('/Bearer\s(\S+)/', $_SERVER['HTTP_AUTHORIZATION'], $matches)) {
+        $token = $matches[1];
+    }
+}
+
+// إذا مافي توكن
 if (empty($token)) {
     echo json_encode(["status" => false, "message" => "Token required"]);
     exit;
 }
 
-// التحقق من اتصال PDO
+// ========== تحقق من اتصال قاعدة البيانات ==========
 if (!isset($pdo)) {
     echo json_encode(["status" => false, "message" => "PDO NOT LOADED"]);
     exit;
 }
 
-// جلب المستخدم من user_tokens
+// ========== تحقق من التوكن ==========
 $stmt = $pdo->prepare("SELECT user_id FROM user_tokens WHERE token = ?");
 $stmt->execute([$token]);
 $userRow = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -49,10 +62,9 @@ if (!$userRow) {
 
 $user_id = $userRow["user_id"];
 
-// **جلب العملاء الذي أضافهم هذا المستخدم**
+// ========== جلب العملاء ==========
 $stmt = $pdo->prepare("
-    SELECT 
-        id, name, phone, store_name, address, lat, lng, created_at
+    SELECT id, name, phone, store_name, address, lat, lng, created_at
     FROM customers
     WHERE created_by = ?
     ORDER BY id DESC
@@ -60,7 +72,7 @@ $stmt = $pdo->prepare("
 $stmt->execute([$user_id]);
 $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// إخراج النتيجة
+// ========== إخراج ==========
 echo json_encode([
     "status" => true,
     "data" => $clients
