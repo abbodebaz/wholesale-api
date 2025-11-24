@@ -1,13 +1,10 @@
 <?php
 
-// =========================
-//   CORS
-// =========================
+// السماح للدومينات
 $allowedOrigins = [
     "https://ebaaptl.com",
     "https://www.ebaaptl.com"
 ];
-
 if (isset($_SERVER['HTTP_ORIGIN']) && in_array($_SERVER['HTTP_ORIGIN'], $allowedOrigins)) {
     header("Access-Control-Allow-Origin: " . $_SERVER['HTTP_ORIGIN']);
 }
@@ -23,21 +20,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 header("Content-Type: application/json");
 require_once "../config.php";
 
-
-// =========================
-//   إستقبال البيانات
-// =========================
 $token       = $_POST["token"] ?? "";
 $customer_id = $_POST["customer_id"] ?? "";
 $notes       = $_POST["notes"] ?? "";
 $lat         = $_POST["lat"] ?? "";
 $lng         = $_POST["lng"] ?? "";
-$images_b64  = $_POST["images"] ?? "[]";    // هنا الصور Base64 جاهزة
 
-
-// =========================
-//   تحقق التوكن
-// =========================
+// تحقق من التوكن
 $stmt = $pdo->prepare("SELECT user_id FROM user_tokens WHERE token = ?");
 $stmt->execute([$token]);
 $user = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -49,41 +38,34 @@ if (!$user) {
 
 $field_user_id = $user["user_id"];
 
-
-// =========================
-//   حفظ الصور Base64 في السيرفر
-// =========================
-$imgArray = json_decode($images_b64, true);
-$savedImages = [];
-
+// مسار رفع الصور الحقيقي
 $uploadDir = "/home/u630342272/domains/ebaaptl.com/public_html/wholesale/uploads/visits/";
 
 if (!is_dir($uploadDir)) {
     mkdir($uploadDir, 0777, true);
 }
 
-foreach ($imgArray as $img) {
+$imageNames = [];
 
-    // decode Base64
-    $part = explode(",", $img);
-    $decoded = base64_decode(end($part));
+if (isset($_FILES["images"])) {
+    for ($i = 0; $i < count($_FILES["images"]["name"]); $i++) {
 
-    // اسم الصورة
-    $fileName = "visit_" . uniqid() . ".jpg";
-    $fullPath = $uploadDir . $fileName;
+        $tmp  = $_FILES["images"]["tmp_name"][$i];
+        $orig = $_FILES["images"]["name"][$i];
 
-    // حفظ الصورة
-    file_put_contents($fullPath, $decoded);
+        if (!is_uploaded_file($tmp)) continue;
 
-    $savedImages[] = $fileName;
+        $ext  = strtolower(pathinfo($orig, PATHINFO_EXTENSION));
+        $name = "visit_" . uniqid() . "." . $ext;
+
+        if (move_uploaded_file($tmp, $uploadDir . $name)) {
+            $imageNames[] = $name;
+        }
+    }
 }
 
-$imagesJSON = json_encode($savedImages);
+$imagesJSON = json_encode($imageNames);
 
-
-// =========================
-//   إدخال الزيارة
-// =========================
 $stmt = $pdo->prepare("
     INSERT INTO visits (field_user_id, customer_id, notes, images, visited_at, lat, lng)
     VALUES (?, ?, ?, ?, NOW(), ?, ?)
@@ -100,6 +82,6 @@ $ok = $stmt->execute([
 
 echo json_encode([
     "status"  => $ok,
-    "message" => $ok ? "Visit added successfully" : "Failed to add visit",
-    "images"  => $savedImages
+    "images"  => $imageNames,
+    "message" => $ok ? "Visit added successfully" : "Failed to add visit"
 ]);
