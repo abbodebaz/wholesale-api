@@ -20,22 +20,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 header("Content-Type: application/json");
 require_once "../config.php";
 
-$input = json_decode(file_get_contents("php://input"), true);
+// المتغيرات من POST
+$token       = $_POST["token"]       ?? "";
+$customer_id = $_POST["customer_id"] ?? "";
+$notes       = $_POST["notes"]       ?? "";
+$lat         = $_POST["lat"]         ?? "";
+$lng         = $_POST["lng"]         ?? "";
 
-$token       = $input["token"]       ?? "";
-$customer_id = $input["customer_id"] ?? "";
-$notes       = $input["notes"]       ?? "";
-$images      = $input["images"]      ?? [];
-$lat         = $input["lat"]         ?? "";
-$lng         = $input["lng"]         ?? "";
-
-// check
+// التحقق من المدخلات الأساسية
 if (empty($token) || empty($customer_id) || empty($lat) || empty($lng)) {
     echo json_encode(["status" => false, "message" => "Missing required fields"]);
     exit;
 }
 
-// token check
+// التحقق من التوكن
 $stmt = $pdo->prepare("SELECT user_id FROM user_tokens WHERE token = ?");
 $stmt->execute([$token]);
 $user = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -47,34 +45,40 @@ if (!$user) {
 
 $field_user_id = $user["user_id"];
 
-// === FIXED: Correct Hostinger upload path ===
-$uploadURL  = "https://ebaaptl.com/wholesale/uploads/visits/";
-$uploadDIR  = "/home/u630342272/domains/ebaaptl.com/public_html/wholesale/uploads/visits/";
+// مسار الرفع الصحيح
+$uploadDir = "/home/u630342272/public_html/wholesale/uploads/visits/";
+$uploadURL = "https://ebaaptl.com/wholesale/uploads/visits/";
 
-if (!is_dir($uploadDIR)) {
-    mkdir($uploadDIR, 0777, true);
+// إنشاء المجلد إذا غير موجود
+if (!is_dir($uploadDir)) {
+    mkdir($uploadDir, 0777, true);
 }
 
+// معالجة الصور المرفوعة
 $imageNames = [];
 
-if (!empty($images)) {
+if (!empty($_FILES["images"]["name"][0])) {
 
-    $hostingerApi = "https://ebaaptl.com/wholesale/save_visit_images.php";
+    for ($i = 0; $i < count($_FILES["images"]["name"]); $i++) {
 
-    $response = file_get_contents($hostingerApi, false, stream_context_create([
-        "http" => [
-            "method" => "POST",
-            "header" => "Content-Type: application/json",
-            "content" => json_encode(["images" => $images])
-        ]
-    ]));
+        $tmpName = $_FILES["images"]["tmp_name"][$i];
+        $origName = $_FILES["images"]["name"][$i];
 
-    $data = json_decode($response, true);
-    $imageNames = $data["paths"] ?? [];
+        $ext = pathinfo($origName, PATHINFO_EXTENSION);
+        $fileName = "visit_" . uniqid() . "." . $ext;
+
+        $fullPath = $uploadDir . $fileName;
+
+        if (move_uploaded_file($tmpName, $fullPath)) {
+            $imageNames[] = $fileName;
+        }
+    }
 }
 
+// تحويل الصور JSON
+$imagesJSON = json_encode($imageNames);
 
-// save visit
+// حفظ الزيارة
 $stmt = $pdo->prepare("
     INSERT INTO visits (field_user_id, customer_id, notes, images, visited_at, lat, lng)
     VALUES (?, ?, ?, ?, NOW(), ?, ?)
