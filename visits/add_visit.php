@@ -18,21 +18,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit();
 }
 
+<?php
 header("Content-Type: application/json");
 require_once "../config.php";
 
-// استقبال المدخلات
-$token       = $_POST["token"]       ?? "";
+$token       = $_POST["token"] ?? "";
 $customer_id = $_POST["customer_id"] ?? "";
-$notes       = $_POST["notes"]       ?? "";
-$lat         = $_POST["lat"]         ?? "";
-$lng         = $_POST["lng"]         ?? "";
+$notes       = $_POST["notes"] ?? "";
+$lat         = $_POST["lat"] ?? "";
+$lng         = $_POST["lng"] ?? "";
+$images_json = $_POST["images"] ?? "[]"; // هنا نجيب أسماء الصور الجاهزة
 
-// التحقق من المدخلات
-if (empty($token) || empty($customer_id) || empty($lat) || empty($lng)) {
-    echo json_encode(["status" => false, "message" => "Missing required fields"]);
+// تحقق من التوكن
+$stmt = $pdo->prepare("SELECT user_id FROM user_tokens WHERE token = ?");
+$stmt->execute([$token]);
+$user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+if (!$user) {
+    echo json_encode(["status" => false, "message" => "Invalid token"]);
     exit;
 }
+
+$field_user_id = $user["user_id"];
+
+// حفظ الزيارة
+$stmt = $pdo->prepare("
+    INSERT INTO visits (field_user_id, customer_id, notes, images, visited_at, lat, lng)
+    VALUES (?, ?, ?, ?, NOW(), ?, ?)
+");
+
+$ok = $stmt->execute([
+    $field_user_id,
+    $customer_id,
+    $notes,
+    $images_json,
+    $lat,
+    $lng
+]);
+
+echo json_encode([
+    "status" => $ok,
+    "message" => $ok ? "Visit added successfully" : "Failed to add visit"
+]);
+
 
 // التحقق من التوكن
 $stmt = $pdo->prepare("SELECT user_id FROM user_tokens WHERE token = ?");
