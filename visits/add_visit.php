@@ -66,7 +66,22 @@ if (!empty($images)) {
         $fileName = uniqid("visit_") . ".jpg";
         $fullPath = $uploadDIR . $fileName;
 
-        file_put_contents($fullPath, $decoded);
+        error_reporting(E_ALL);
+        ini_set('display_errors', 1);
+
+$write = file_put_contents($fullPath, $decoded);
+
+if ($write === false) {
+    echo json_encode([
+        "status" => false,
+        "message" => "Failed to write file",
+        "path" => $fullPath,
+        "dir_exists" => is_dir(dirname($fullPath)),
+        "dir_writable" => is_writable(dirname($fullPath)),
+        "file_writable" => is_writable($uploadDIR)
+    ]);
+    exit;
+}
 
         $imageNames[] = $fileName;
     }
